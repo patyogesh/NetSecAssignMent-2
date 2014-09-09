@@ -13,7 +13,8 @@
     printf("     Local Mode: dump file to local machines\n");\
 }
 
-int init_client(int server_port, char *server_ip, FILE *fptr)
+Error_t
+init_secure_connection(int server_port, char *server_ip, FILE *fptr)
 {
     cryp_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -44,7 +45,8 @@ int init_client(int server_port, char *server_ip, FILE *fptr)
 }
 
 
-int extract_server_ip_port(char *args, char **server_ip, int *server_port)
+Error_t
+extract_server_ip_port(char *args, char **server_ip, int *server_port)
 {
     int i = 0, j = 0;
 
@@ -67,8 +69,32 @@ int extract_server_ip_port(char *args, char **server_ip, int *server_port)
     return 0;
 }
 
+Error_t
+start_data_transfer(FILE *fptr)
+{
+    size_t read_status;
+
+    while(1) {
+	read_status = fread(send_buffer, BUFFER_SIZE, 1, fptr);
+
+	puts(send_buffer);
+
+	if(feof(fptr) == read_status) {
+	    puts("End of FILE");
+	    return SUCCESS;
+	}
+	else if(ferror(fptr) == read_status) {
+	    return FREAD_FAIL;
+	}
+    }
+
+    return SUCCESS;
+}
+
 int main(int argc, char *argv[])
 {
+    Error_t ret_status = SUCCESS;
+
     char *server_ip = NULL;
     int server_port = 0;
 
@@ -86,10 +112,16 @@ int main(int argc, char *argv[])
 	return FOPEN_FAIL;
     }
 
-    extract_server_ip_port(argv[2], &server_ip, &server_port);
+    ret_status = extract_server_ip_port(argv[2], &server_ip, &server_port);
 
-    init_client(server_port, server_ip, fptr);
+    ret_status = init_secure_connection(server_port, server_ip, fptr);
 
+    if(SUCCESS != ret_status) {
+	printf("Connection establishment failed \n");
+	return FAILURE;
+    }
+
+    ret_status = start_data_transfer(fptr);
 
     return 0;
 }

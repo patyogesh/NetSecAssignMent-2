@@ -19,8 +19,8 @@ struct sockaddr_in server_addr;
 int cryp_sock_fd = 0;
 int dec_sock_fd = 0;
 
-char sendBuffer[BUFFER_SIZE];
-char recvBuffer[BUFFER_SIZE];
+char send_buffer[BUFFER_SIZE];
+char recv_buffer[BUFFER_SIZE];
 
 typedef enum errors {
     SUCCESS,
