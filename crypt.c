@@ -73,19 +73,19 @@ Error_t
 start_data_transfer(FILE *fptr)
 {
     size_t read_status;
+    ssize_t sent_bytes;
 
-    while(1) {
+    while(!feof(fptr)) {
 	read_status = fread(send_buffer, BUFFER_SIZE, 1, fptr);
 
-	puts(send_buffer);
+	sent_bytes = send(cryp_sock_fd, send_buffer, strlen(send_buffer), 0);
 
-	if(feof(fptr) == read_status) {
-	    puts("End of FILE");
-	    return SUCCESS;
+	if(sent_bytes < 0) {
+
+	    printf("Send Failed\n");
+	    return SEND_FAIL;
 	}
-	else if(ferror(fptr) == read_status) {
-	    return FREAD_FAIL;
-	}
+	
     }
 
     return SUCCESS;

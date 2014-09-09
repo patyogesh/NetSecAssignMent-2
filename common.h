@@ -30,6 +30,8 @@ typedef enum errors {
     SOCKET_FAIL,
     CONNECT_FAIL,
     BIND_FAIL,
+    LISTEN_FAIL,
+    ACCEPT_FAIL,
     RECV_FAIL,
     SEND_FAIL,
     FREAD_FAIL,
