@@ -106,6 +106,21 @@ generate_passkey()
 
     printf("Password : ");
     scanf("%s", password);
+
+    if(!gcry_check_version(GCRYPT_VERSION)) {
+        printf("gcrypt versiob mismatch \n");
+        exit (1);
+    }
+
+    gcry_control (GCRYCTL_SUSPEND_SECMEM_WARN);
+
+    gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
+
+    gcry_control (GCRYCTL_RESUME_SECMEM_WARN);
+
+    gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+    return SUCCESS;
 }
 int main(int argc, char *argv[])
 {
@@ -135,6 +150,9 @@ int main(int argc, char *argv[])
     else if(!strcmp("-l", argv[2])) {
 
         mode = LOCAL;
+    }
+    else {
+        bad_options = TRUE;
     }
 
     if(TRUE == bad_options) {

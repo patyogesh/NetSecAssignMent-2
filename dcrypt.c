@@ -115,6 +115,9 @@ int main(int argc, char *argv[])
     else if(!strcmp("-l", argv[2])) {
         mode = LOCAL;
     }
+    else {
+        bad_options = TRUE;
+    }
 
     if( TRUE == bad_options) {
 

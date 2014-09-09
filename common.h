@@ -10,6 +10,7 @@
 #include <netinet/in.h>                                                                                                                                                 
 #include <netdb.h> 
 #include <arpa/inet.h>
+#include <gcrypt.h>
 
 struct sockaddr_in server_addr;
 
