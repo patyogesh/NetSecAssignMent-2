@@ -103,6 +103,7 @@ Error_t
 generate_passkey()
 {
     char password[32];
+    char key_buffer[16];
 
     printf("Password : ");
     scanf("%s", password);
@@ -120,6 +121,25 @@ generate_passkey()
 
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
+    memset(key_buffer, '\0', sizeof(key_buffer));
+    gcry_kdf_derive(password,
+                    strlen(password),
+                    GCRY_KDF_PBKDF2,
+                    GCRY_MD_SHA512,
+                    "NaCl",
+                    strlen("Nacl"),
+                    4096,
+                    sizeof(key_buffer),
+                    key_buffer);
+
+    int i = 0;
+    printf("%X \n", key_buffer);
+    printf("Key : ");
+    while(i <sizeof(key_buffer)) {
+        printf("%X ", key_buffer[i]);
+        i++;
+    }
+    printf("\n ");
     return SUCCESS;
 }
 int main(int argc, char *argv[])
