@@ -1,0 +1,8 @@
+sha1-ssse3-amd64.lo: sha1-ssse3-amd64.S /usr/include/stdc-predef.h \
+ /usr/include/x86_64-linux-gnu/bits/predefs.h ../config.h
+
+/usr/include/stdc-predef.h:
+
+/usr/include/x86_64-linux-gnu/bits/predefs.h:
+
+../config.h:

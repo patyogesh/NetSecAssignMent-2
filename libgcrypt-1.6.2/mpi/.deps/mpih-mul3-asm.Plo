@@ -1,0 +1,10 @@
+mpih-mul3-asm.lo: mpih-mul3-asm.S /usr/include/stdc-predef.h \
+ /usr/include/x86_64-linux-gnu/bits/predefs.h sysdep.h asm-syntax.h
+
+/usr/include/stdc-predef.h:
+
+/usr/include/x86_64-linux-gnu/bits/predefs.h:
+
+sysdep.h:
+
+asm-syntax.h:
