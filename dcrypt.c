@@ -4,13 +4,14 @@
 #include <netdb.h>
 #include "common.h"
 
-#define HOW_TO_USE {\
-    printf("gatorcrypt <input file> [-d < port >][-l] \n\n"); \
-    printf("Description: \n\n");\
-    printf(" -d < port > :\n");\
-    printf("     Listening port \n");\
-    printf(" -l :\n");\
-    printf("     Local Mode: decode local file \n");\
+void how_to_use() 
+{
+    printf("gatorcrypt <input file> [-d < port >][-l] \n\n");
+    printf("Description: \n\n");
+    printf(" -d < port > :\n");
+    printf("     Listening port \n");
+    printf(" -l :\n");
+    printf("     Local Mode: decode local file \n");
 }
 
 Error_t
@@ -92,12 +93,34 @@ int main(int argc, char *argv[])
 {
     Error_t ret_status = SUCCESS;
 
+    int bad_options = FALSE;
     int server_port = 0;
+    Mode_t mode = UNDEFINED;
 
-    if(argc < 2) {
-	printf("ERROR: Insufficient Arguments\n");
-	HOW_TO_USE;
-	return FAILURE;
+    if(argc < 3) {
+        printf("ERROR: Insufficient/Incorrect Arguments\n");
+        how_to_use();
+        return FAILURE;
+    }
+
+    if(!strcmp("-d", argv[2])) {
+
+        if(argc < 4) { 
+            bad_options = TRUE;
+        }
+
+        mode = REMOTE;
+        server_port = atoi(argv[3]);
+    }
+    else if(!strcmp("-l", argv[2])) {
+        mode = LOCAL;
+    }
+
+    if( TRUE == bad_options) {
+
+        printf("ERROR: Insufficient/Incorrect Arguments\n");
+        how_to_use();
+        return FAILURE;
     }
 
     FILE *fptr = NULL;
@@ -109,7 +132,6 @@ int main(int argc, char *argv[])
 	return FOPEN_FAIL;
     }
 
-    server_port = atoi(argv[2]);
 
     ret_status = wait_for_secure_connection(server_port, fptr);
 

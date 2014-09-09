@@ -13,6 +13,8 @@
 
 struct sockaddr_in server_addr;
 
+#define TRUE 1
+#define FALSE 0
 #define BUFFER_SIZE 1024
 #define SERVER_PORT 2346
 
@@ -21,6 +23,13 @@ int dec_sock_fd = 0;
 
 char send_buffer[BUFFER_SIZE];
 char recv_buffer[BUFFER_SIZE];
+
+typedef enum mode {
+    REMOTE,
+    LOCAL,
+    UNDEFINED
+}
+Mode_t;
 
 typedef enum errors {
     SUCCESS,

@@ -4,13 +4,16 @@
 #include <netdb.h>
 #include "common.h"
 
-#define HOW_TO_USE {\
-    printf("gatorcrypt <input file> [-d < IP-addr:port >][-l] \n\n"); \
-    printf("Description: \n\n");\
-    printf(" -d < IP-Address:port > :\n");\
-    printf("     Destination machines IP and port address pair to dump file to \n");\
-    printf(" -l :\n");\
-    printf("     Local Mode: dump file to local machines\n");\
+void 
+how_to_use() 
+{
+    printf("USAGE: \n\n");
+    printf("gatorcrypt <input file> [-d < IP-addr:port >][-l] \n\n"); 
+    printf("Description: \n\n");
+    printf(" -d < IP-Address:port > :\n");
+    printf("     Destination machine's IP and port address pair to dump file to \n");
+    printf(" -l :\n");
+    printf("     Local Mode: dump file to local machines\n");
 }
 
 Error_t
@@ -96,17 +99,49 @@ start_data_transfer(FILE *fptr)
     return SUCCESS;
 }
 
+Error_t
+generate_passkey()
+{
+    char password[32];
+
+    printf("Password : ");
+    scanf("%s", password);
+}
 int main(int argc, char *argv[])
 {
     Error_t ret_status = SUCCESS;
+    int  bad_options = FALSE;
+    Mode_t  mode = UNDEFINED;
 
     char *server_ip = NULL;
     int server_port = 0;
 
-    if(argc < 2) {
-	printf("ERROR: Insufficient Arguments\n");
-	HOW_TO_USE;
-	return FAILURE;
+    if(argc < 3) {
+
+        printf("ERROR: Insufficient/Incorrect Arguments\n");
+        how_to_use();
+        return FAILURE;
+    }
+
+    if(!strcmp("-d", argv[2])) { 
+
+        if(argc < 4) {
+            bad_options = TRUE;
+        }
+
+        mode = REMOTE;
+    }
+    
+    else if(!strcmp("-l", argv[2])) {
+
+        mode = LOCAL;
+    }
+
+    if(TRUE == bad_options) {
+
+        printf("ERROR: Insufficient/Incorrect Arguments\n");
+        how_to_use();
+        return FAILURE;
     }
 
     FILE *fptr = fopen(argv[1], "r+");
@@ -117,7 +152,7 @@ int main(int argc, char *argv[])
 	return FOPEN_FAIL;
     }
 
-    ret_status = extract_server_ip_port(argv[2], &server_ip, &server_port);
+    ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
 
     ret_status = init_secure_connection(server_port, server_ip, fptr);
 
@@ -125,6 +160,11 @@ int main(int argc, char *argv[])
 	printf("Connection establishment failed \n");
 	return FAILURE;
     }
+    else {
+	    printf("Connected !! \n");
+    }
+
+    generate_passkey();
 
     ret_status = start_data_transfer(fptr);
     
