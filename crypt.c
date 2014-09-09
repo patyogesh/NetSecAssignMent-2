@@ -72,12 +72,17 @@ extract_server_ip_port(char *args, char **server_ip, int *server_port)
 Error_t
 start_data_transfer(FILE *fptr)
 {
-    size_t read_status;
+    size_t read_bytes;
     ssize_t sent_bytes;
 
     while(!feof(fptr)) {
-	read_status = fread(send_buffer, BUFFER_SIZE, 1, fptr);
+	read_bytes = fread(send_buffer, BUFFER_SIZE, 1, fptr);
 
+	if(read_bytes < 0) {
+	    printf("File Read Failed\n");
+	    return FREAD_FAIL;
+	}
+	
 	sent_bytes = send(cryp_sock_fd, send_buffer, strlen(send_buffer), 0);
 
 	if(sent_bytes < 0) {
@@ -122,6 +127,9 @@ int main(int argc, char *argv[])
     }
 
     ret_status = start_data_transfer(fptr);
+    
+    fclose(fptr);
+    close(cryp_sock_fd);
 
     return 0;
 }

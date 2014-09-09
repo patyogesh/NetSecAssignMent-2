@@ -103,11 +103,11 @@ int main(int argc, char *argv[])
     FILE *fptr = NULL;
     fptr = fopen(argv[1], "r+");
     
-    /*if(NULL == fptr) {
+    if(NULL == fptr) {
 
 	printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
 	return FOPEN_FAIL;
-    }*/
+    }
 
     server_port = atoi(argv[2]);
 
@@ -117,6 +117,9 @@ int main(int argc, char *argv[])
 	printf("Connection establishment failed \n");
 	return FAILURE;
     }
+
+    fclose(fptr);
+    close(dec_sock_fd);
 
     return 0;
 }
