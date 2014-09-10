@@ -1,9 +1,6 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
 #include "common.h"
 
+int cryp_sock_fd = 0;                                                                                                                                                   
 void 
 how_to_use() 
 {
@@ -99,49 +96,7 @@ start_data_transfer(FILE *fptr)
     return SUCCESS;
 }
 
-Error_t
-generate_passkey()
-{
-    char password[32];
-    char key_buffer[16];
 
-    printf("Password : ");
-    scanf("%s", password);
-
-    if(!gcry_check_version(GCRYPT_VERSION)) {
-        printf("gcrypt versiob mismatch \n");
-        exit (1);
-    }
-
-    gcry_control (GCRYCTL_SUSPEND_SECMEM_WARN);
-
-    gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
-
-    gcry_control (GCRYCTL_RESUME_SECMEM_WARN);
-
-    gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
-
-    memset(key_buffer, '\0', sizeof(key_buffer));
-    gcry_kdf_derive(password,
-                    strlen(password),
-                    GCRY_KDF_PBKDF2,
-                    GCRY_MD_SHA512,
-                    "NaCl",
-                    strlen("Nacl"),
-                    4096,
-                    sizeof(key_buffer),
-                    key_buffer);
-
-    int i = 0;
-    printf("%X \n", key_buffer);
-    printf("Key : ");
-    while(i <sizeof(key_buffer)) {
-        printf("%X ", key_buffer[i]);
-        i++;
-    }
-    printf("\n ");
-    return SUCCESS;
-}
 int main(int argc, char *argv[])
 {
     Error_t ret_status = SUCCESS;
@@ -202,7 +157,10 @@ int main(int argc, char *argv[])
 	    printf("Connected !! \n");
     }
 
-    generate_passkey();
+    if(NULL == generate_passkey()) {
+	printf("Key generation Failed....existing with 1");
+	exit(1);
+    }
 
     ret_status = start_data_transfer(fptr);
     

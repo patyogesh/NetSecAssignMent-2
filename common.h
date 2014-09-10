@@ -19,8 +19,8 @@ struct sockaddr_in server_addr;
 #define BUFFER_SIZE 1024
 #define SERVER_PORT 2346
 
-int cryp_sock_fd = 0;
-int dec_sock_fd = 0;
+//int cryp_sock_fd = 0;
+//int dec_sock_fd = 0;
 
 char send_buffer[BUFFER_SIZE];
 char recv_buffer[BUFFER_SIZE];
@@ -53,4 +53,6 @@ Error_t;
 
 
 
+char *                                                                                                                                                                  
+generate_passkey();
 #endif

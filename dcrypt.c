@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include "common.h"
 
+int dec_sock_fd = 0;
 void how_to_use() 
 {
     printf("gatorcrypt <input file> [-d < port >][-l] \n\n");
@@ -68,6 +69,10 @@ wait_for_secure_connection(int server_port, FILE *fptr)
 	return ACCEPT_FAIL;
     }
 	
+    if(NULL == generate_passkey()) {
+	printf("Key generation Failed....existing with 1");
+	exit(1);
+    }
     printf(" Success: accept success \n");
     
     read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
