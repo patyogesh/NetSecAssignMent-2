@@ -19,6 +19,13 @@ struct sockaddr_in server_addr;
 #define BUFFER_SIZE 1024
 #define SERVER_PORT 2346
 
+#define MAX_PASSWORD_LEN 32
+#define KEY_LEN 16
+#define IV 5844
+#define IV_SIZE sizeof(IV)
+#define ENCRYPTION_ALGO GCRY_CIPHER_AES128
+#define ENCRYPTION_MODE GCRY_CIPHER_MODE_CBC
+
 //int cryp_sock_fd = 0;
 //int dec_sock_fd = 0;
 
@@ -53,6 +60,7 @@ Error_t;
 
 
 
-char *                                                                                                                                                                  
-generate_passkey();
+char* generate_passkey();
+
+char* encrypt_file_data(FILE *fptr, char *key);
 #endif

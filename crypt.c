@@ -104,6 +104,7 @@ int main(int argc, char *argv[])
     Mode_t  mode = UNDEFINED;
 
     char *server_ip = NULL;
+    char *key = NULL;
     int server_port = 0;
 
     if(argc < 3) {
@@ -157,13 +158,27 @@ int main(int argc, char *argv[])
 	    printf("Connected !! \n");
     }
 
-    if(NULL == generate_passkey()) {
-	printf("Key generation Failed....existing with 1");
+    key = generate_passkey();
+
+    if(NULL == key) {
+	printf("Key generation Failed....exiting with 1");
 	exit(1);
     }
 
+    encrypt_file_data(fptr, key);
+
     ret_status = start_data_transfer(fptr);
     
+    if(key) {
+	free(key);
+	key = NULL;
+    }
+    if(key) {
+	free(key);
+	key = NULL;
+    }
+
+
     fclose(fptr);
     close(cryp_sock_fd);
 
