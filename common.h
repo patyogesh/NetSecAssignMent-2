@@ -22,6 +22,7 @@ struct sockaddr_in server_addr;
 #define MAX_PASSWORD_LEN 32
 #define KEY_LEN 16
 #define IV 5844
+#define IV_LEN 16
 #define IV_SIZE sizeof(IV)
 #define ENCRYPTION_ALGO GCRY_CIPHER_AES128
 #define ENCRYPTION_MODE GCRY_CIPHER_MODE_CBC

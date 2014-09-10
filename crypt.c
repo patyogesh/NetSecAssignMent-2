@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 	return FAILURE;
     }
     else {
-	    printf("Connected !! \n");
+	printf("Connected !! \n");
     }
 
     key = generate_passkey();
@@ -173,11 +173,6 @@ int main(int argc, char *argv[])
 	free(key);
 	key = NULL;
     }
-    if(key) {
-	free(key);
-	key = NULL;
-    }
-
 
     fclose(fptr);
     close(cryp_sock_fd);
