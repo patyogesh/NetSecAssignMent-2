@@ -68,4 +68,10 @@ Error_t;
 char* generate_passkey();
 
 char* encrypt_file_data(FILE *fptr, char *key, int file_size);
+
+char* generate_hmac(char *cipher,
+		    char *key,
+		    int  f_size);
+
+int get_file_size(FILE *fptr);
 #endif

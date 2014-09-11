@@ -50,7 +50,6 @@ char*  _encrypt(char *send_buffer,
 	     	char *key, 
 	     	int  send_buff_len)
 {
-    int ret_status = SUCCESS;
     gcry_error_t gcry_err;
 
     unsigned long int iv = IV;
@@ -121,7 +120,7 @@ _hmac(char *cipher,
 {
     gcry_error_t gcry_err;
 
-    char   *hash_val = NULL;
+    unsigned char   *hash_val = NULL;
     char   *computed_hash = (char *) malloc (HASH_SZ);
 
     gcry_md_hd_t handle;

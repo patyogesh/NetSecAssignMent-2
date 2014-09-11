@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
     char    *hmac = NULL;
     int     server_port = 0;
     int     f_size = 0;
-    FILE    *fptr = NULL;
+    FILE    *fptr_read = NULL;
 
     if(argc < 3) {
 
@@ -149,38 +149,27 @@ int main(int argc, char *argv[])
     }
 
 
-    ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
+    fptr_read = fopen(argv[1], "r+");
 
-    ret_status = init_secure_connection(server_port, server_ip);
-
-    if(SUCCESS != ret_status) {
-	printf("Connection establishment failed \n");
-	return FAILURE;
-    }
-    else {
-	printf("Connected !! \n");
-    }
-
-    fptr = fopen(argv[1], "r+");
-
-    if(NULL == fptr) {
-
+    if(NULL == fptr_read) 
+    {
 	printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
 	return FOPEN_FAIL;
     }
 
-    f_size = get_file_size(fptr);
+    f_size = get_file_size(fptr_read);
 
     /* TODO: you have to free key Finally : DONE */
     key = generate_passkey();
 
-    if(NULL == key) {
+    if(NULL == key) 
+    {
 	printf("Key generation Failed....exiting with 1");
 	exit(1);
     }
 
     /* TODO: you have to free cipher_text after writing to file : DONE */
-    cipher_text = encrypt_file_data(fptr, key, f_size);
+    cipher_text = encrypt_file_data(fptr_read, key, f_size);
 
     if(NULL == cipher_text) {
 	printf("Encryption Failed....exiting with 1");
@@ -190,13 +179,60 @@ int main(int argc, char *argv[])
     /* TODO: you have to free hmac Finally : DONE */
     hmac = generate_hmac(cipher_text, key, f_size);
 
-    ret_status = start_data_transfer(cipher_text, hmac, f_size);
+    switch(mode) {
+
+	case REMOTE:
+	    {
+		ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
+
+		ret_status = init_secure_connection(server_port, server_ip);
+
+		if(SUCCESS != ret_status) {
+		    printf("Connection establishment failed \n");
+		    return FAILURE;
+		}
+		else {
+		    printf("Connected !! \n");
+		}
+
+		ret_status = start_data_transfer(cipher_text, hmac, f_size);
+	    }
+	    break;
+
+	case LOCAL:
+	    {
+    		FILE   *fptr_write = NULL;
+		int    write_len = strlen(cipher_text) + strlen(hmac);
+
+		strcat(argv[1], ".uf");
+
+    		fptr_write = fopen(argv[1], "r+");
+		
+		if(fptr_write) {
+			printf("[ERROR]: %s file already exists, exiting with error code 33\n", argv[1]);
+			fclose(fptr_write);
+			exit(33);
+		}
+
+    		fptr_write = fopen(argv[1], "w+");
+
+		cipher_text = (char *) realloc (cipher_text, write_len);
+
+		strcat(cipher_text, hmac);
+		
+		fwrite(cipher_text, 1, write_len, fptr_write);
+
+		fclose(fptr_write);
+
+	    }
+	    break;
+    };
     
     FREE(key);
     FREE(cipher_text);
     FREE(hmac);
 
-    fclose(fptr);
+    fclose(fptr_read);
     close(cryp_sock_fd);
 
     return 0;
