@@ -3,7 +3,7 @@ CC=gcc
 INC=-I.
 LIBS=-lgcrypt
 
-CFLAGS= -g -Wall
+CFLAGS= -g
 
 %.o: %.c $(INC)
 	$(CC) -c -o $@ $< $(CFLAGS) $(INC) $(LIBS)

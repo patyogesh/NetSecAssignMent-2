@@ -16,11 +16,37 @@ void how_to_use()
 }
 
 Error_t
-wait_for_secure_connection(int server_port, FILE *fptr)
+receive_remote_data(int   conn_fd, 
+		    char  *recv_buffer,
+		    FILE  *write_fptr)
+{
+    int read_bytes = 0;
+
+    read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
+
+    if(read_bytes == -1) {
+	return RECV_FAIL;
+    }
+    fwrite(recv_buffer, 1, read_bytes, write_fptr);
+    
+    printf(" Read %d \n", read_bytes);
+
+    while(read_bytes > 0) {
+    	read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
+    	printf(" Read %d \n", read_bytes);
+    	fwrite(recv_buffer, 1, read_bytes, write_fptr);
+    }
+
+    return SUCCESS;
+}
+
+Error_t
+wait_for_secure_connection(int server_port, 
+			   FILE *fptr,
+			   int  *conn_fd)
 {
     Error_t ret_status = SUCCESS;
 
-    int conn_fd;
     int sock_len = 0;
     int read_bytes = 0;
 
@@ -60,35 +86,16 @@ wait_for_secure_connection(int server_port, FILE *fptr)
 
     sock_len = sizeof(struct sockaddr_in);
 
-    conn_fd = accept( dec_sock_fd, 
-	    	     (struct sockaddr *) &client_addr, 
-		     (socklen_t *) &sock_len);
+    *conn_fd = accept( dec_sock_fd, 
+	    	       (struct sockaddr *) &client_addr, 
+		       (socklen_t *) &sock_len);
 
-    if(conn_fd < 0) {
+    if(*conn_fd < 0) {
 	printf(" ERROR: accept failed \n");
 	return ACCEPT_FAIL;
     }
 	
-    if(NULL == generate_passkey()) {
-	printf("Key generation Failed....existing with 1");
-	exit(1);
-    }
     printf(" Success: accept success \n");
-    
-    read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
-    printf(" Read %d \n", read_bytes);
-    while(read_bytes > 0) {
-	puts(recv_buffer);
-    	read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
-    }
-
-    if(read_bytes == -1) {
-	printf("Receive Failed\n");
-	return RECV_FAIL;
-    }
-
-    printf("Client Disconnected\n");
-    fflush(stdout);
 
     return SUCCESS;
 }
@@ -102,13 +109,16 @@ int main(int argc, char *argv[])
     int server_port = 0;
     Mode_t mode = UNDEFINED;
 
+    char    *key = NULL;
+
     if(argc < 3) {
         printf("ERROR: Insufficient/Incorrect Arguments\n");
         how_to_use();
         return FAILURE;
     }
 
-    if(!strcmp("-d", argv[2])) {
+    if(!strcmp("-d", argv[2])) 
+    {
 
         if(argc < 4) { 
             bad_options = TRUE;
@@ -117,9 +127,12 @@ int main(int argc, char *argv[])
         mode = REMOTE;
         server_port = atoi(argv[3]);
     }
-    else if(!strcmp("-l", argv[2])) {
+    
+    else if(!strcmp("-l", argv[2])) 
+    {
         mode = LOCAL;
     }
+    
     else {
         bad_options = TRUE;
     }
@@ -131,25 +144,72 @@ int main(int argc, char *argv[])
         return FAILURE;
     }
 
-    FILE *fptr = NULL;
-    fptr = fopen(argv[1], "r+");
-    
-    if(NULL == fptr) {
+    FILE *read_fptr = NULL;
+    FILE *write_fptr = NULL;
 
-	printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
-	return FOPEN_FAIL;
-    }
+    switch(mode) {
+
+	case REMOTE:
+	    {
+		int conn_fd = 0;
+
+    		write_fptr = fopen(argv[1], "w+");
+
+		if(NULL == write_fptr) {
+
+		    printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
+		    return FOPEN_FAIL;
+		}
+
+		ret_status = wait_for_secure_connection(server_port, write_fptr, &conn_fd);
+
+		if(SUCCESS != ret_status) {
+		    printf("No Incoming Connection\n");
+		    return RECV_FAIL;
+		}
+
+		ret_status = receive_remote_data(conn_fd, recv_buffer, write_fptr);
+		fclose(write_fptr);
+
+		if(SUCCESS != ret_status) {
+		    printf("Receive Failed\n");
+		    return RECV_FAIL;
+		}
+
+		key = generate_passkey();
+
+		if(NULL == key) {
+		    printf("Key generation Failed....existing with 1");
+		    exit(1);
+		}
+
+		decrypt_file_data(argv[1], key);
+
+		remove_hmac(argv[1]);
+
+		verify_hmac();
 
 
-    ret_status = wait_for_secure_connection(server_port, fptr);
+		close(conn_fd);
+    		close(dec_sock_fd);
+	    }
+	    break;
 
-    if(SUCCESS != ret_status) {
-	printf("Connection establishment failed \n");
-	return FAILURE;
-    }
+	case LOCAL:
+	    {
+    		read_fptr = fopen(argv[1], "w+");
 
-    fclose(fptr);
-    close(dec_sock_fd);
+		if(NULL == read_fptr) {
+
+		    printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
+		    return FOPEN_FAIL;
+		}
+
+		fclose(read_fptr);
+	    }
+	    break;
+    };
+
 
     return 0;
 }

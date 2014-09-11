@@ -83,18 +83,28 @@ start_data_transfer(char *cipher_text,
 		    int  size)
 {
     ssize_t sent_bytes = 0;
+    ssize_t cum_sent_bytes = 0;
+
+    size = strlen(cipher_text);
 
     printf("\n Cipher Size %d \t hmac %d", strlen(cipher_text), strlen(hmac));
     while(1) {
 	
-	sent_bytes += send(cryp_sock_fd, cipher_text, strlen(cipher_text), 0);
+	sent_bytes = send(cryp_sock_fd, cipher_text, size, 0);
 
-	if(sent_bytes >= size) {
-	    sent_bytes += send(cryp_sock_fd, hmac, strlen(hmac), 0);
+	if(sent_bytes >= 0) {
+	    cum_sent_bytes += sent_bytes;
+	}
+
+	if(cum_sent_bytes >= size) {
 	    break;
 	}
 	
     }
+
+    sent_bytes = send(cryp_sock_fd, hmac, strlen(hmac), 0);
+
+    printf("\tSent : %d \n", cum_sent_bytes + sent_bytes);
 
     return SUCCESS;
 }

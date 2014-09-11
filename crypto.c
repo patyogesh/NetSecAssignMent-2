@@ -8,6 +8,21 @@
     }\
 }
 
+int get_file_size(char  *file_name)
+{
+    int size = 0;
+
+    FILE  *fptr = fopen(file_name, "r+");
+
+    fseek(fptr, 0, SEEK_END);
+    size = ftell(fptr);
+    rewind(fptr);
+
+    fclose(fptr);
+
+    return size;
+}
+
 char*                                                                                                                                                                  
 generate_passkey()                                                                                                                                                      
 {                                                                                                                                                                       
@@ -83,16 +98,6 @@ char*  _encrypt(char *send_buffer,
     return cipher_text;
 }
 
-int get_file_size(FILE *fptr)
-{
-    int size = 0;
-
-    fseek(fptr, 0, SEEK_END);
-    size = ftell(fptr);
-    rewind(fptr);
-
-    return size;
-}
 char*
 encrypt_file_data(FILE *fptr,
 		  char *key,
@@ -155,32 +160,86 @@ generate_hmac(char *cipher,
 {
     return _hmac(cipher, key, f_size);
 }
+char*
+remove_hmac(char *file_name)
+{
+    FILE *fptr = fopen(file_name, "r+");
+
+    fseek(fptr, (4 + 16), SEEK_SET);
+
+    char hmac = (char *) malloc(HASH_SZ);
+
+    fread(hmac, 1, HASH_SZ, fptr);
+
+    fclose(fptr);
+
+    return hmac;
+}
+
+int
+verify_hmac(char *hash,
+	    char *cipher,
+	    char *key,
+	    int  f_size)
+{
+     char *computed_hash = _hmac(cipher, key, f_size);
+
+     return memcmp(hash, computed_hash, HASH_SZ);
+}
 
 
 char*
-decrypt_file_data(FILE *fptr,
+decrypt_file_data(char *file_name,
 		  char *key)
 {
     int f_size;
     int read_bytes;
 
-    f_size = get_file_size(fptr);
 
-    while(!feof(fptr)) {
-	read_bytes = fread(send_buffer, f_size, 1, fptr);
 
-	if(read_bytes < 0) {
-	    printf("File Read Failed\n");
-	    return NULL;
-	}
-    }
+    FILE  *fptr = fopen(file_name, "r+");
 
-    char *cipher_text = _encrypt(send_buffer, key, f_size);
+    int offset = fseek(fptr, 4, SEEK_SET);
 
-    if(!cipher_text) {
-	printf("Encryption Failed\n");
+    char *iv = (char *) malloc (IV_LEN);
+
+    fread(iv, 1, IV_LEN, fptr);
+
+    fclose(fptr);
+
+    printf("Got IV \n");
+    
+
+    f_size = get_file_size(file_name);
+
+    /* Remove HMAC+IV+SALT */
+    f_size -= (64 + 8 + 4);
+    
+    
+    fptr = fopen(file_name, "r+");
+
+    fseek(fptr, (64 + 8 + 4), SEEK_SET);
+
+    char *cipher = (char *) malloc(f_size);
+    
+    read_bytes = fread(cipher, f_size, 1, fptr);
+
+    if(read_bytes < 0) {
+	printf("File Read Failed\n");
 	return NULL;
     }
+    fclose(fptr);
 
-    return cipher_text;
+    char *hash = remove_hmac(file_name);
+
+    int h = verify_hmac(hash, cipher, key, f_size);
+
+    if(h) {
+	printf("HMAC verification failed\n");
+    }
+    else {
+	printf("HMAC verification Success\n");
+    }
+
+    return cipher;
 }
