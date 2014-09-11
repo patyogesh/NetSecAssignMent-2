@@ -21,14 +21,18 @@ struct sockaddr_in server_addr;
 
 #define MAX_PASSWORD_LEN 32
 #define KEY_LEN 16
+#define ITERATIONS 4096
+#define SALT "NaCl"
+#define SALT_LEN strlen(SALT)
+
 #define IV 5844
-#define IV_LEN 16
+#define IV_LEN 8
 #define IV_SIZE sizeof(IV)
 #define ENCRYPTION_ALGO GCRY_CIPHER_AES128
 #define ENCRYPTION_MODE GCRY_CIPHER_MODE_CBC
 
-//int cryp_sock_fd = 0;
-//int dec_sock_fd = 0;
+#define HASH_ALGO GCRY_MD_SHA512
+#define HASH_SZ 64
 
 char send_buffer[BUFFER_SIZE];
 char recv_buffer[BUFFER_SIZE];
@@ -63,5 +67,5 @@ Error_t;
 
 char* generate_passkey();
 
-char* encrypt_file_data(FILE *fptr, char *key);
+char* encrypt_file_data(FILE *fptr, char *key, int file_size);
 #endif
