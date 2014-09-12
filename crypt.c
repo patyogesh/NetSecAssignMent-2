@@ -7,8 +7,6 @@
     }\
 }
 
-int cryp_sock_fd = 0;                                                                                                                                                   
-
 void 
 how_to_use() 
 {
@@ -22,11 +20,11 @@ how_to_use()
 }
 
 Error_t
-init_secure_connection(int server_port, char *server_ip)
+init_secure_connection(Enc_Dec_Apparatus_t *enc, int server_port, char *server_ip)
 {
-    cryp_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    enc->sock_id = socket(AF_INET, SOCK_STREAM, 0);
 
-    if(cryp_sock_fd < 0) {
+    if(enc->sock_id < 0) {
 
 	printf("\n Error opening socket");
 	return SOCKET_FAIL;
@@ -43,7 +41,7 @@ init_secure_connection(int server_port, char *server_ip)
 	return CLIENT_FAIL;
     }
 
-    if(connect(cryp_sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if(connect(enc->sock_id, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 
 	printf("Error while connecting to server\n");
 	return CONNECT_FAIL;
@@ -78,19 +76,18 @@ extract_server_ip_port(char *args, char **server_ip, int *server_port)
 }
 
 Error_t
-start_data_transfer(char *cipher_text,
-		    char *hmac,
+start_data_transfer(Enc_Dec_Apparatus_t *enc,
 		    int  size)
 {
     ssize_t sent_bytes = 0;
     ssize_t cum_sent_bytes = 0;
 
-    size = strlen(cipher_text);
+    size = strlen(enc->cipher_text);
 
-    printf("\n Cipher Size %d \t hmac %d", strlen(cipher_text), strlen(hmac));
+    printf("\n Cipher Size %d \t hmac %d", strlen(enc->cipher_text), strlen(enc->hmac));
     while(1) {
 	
-	sent_bytes = send(cryp_sock_fd, cipher_text, size, 0);
+	sent_bytes = send(enc->sock_id, enc->cipher_text, size, 0);
 
 	if(sent_bytes >= 0) {
 	    cum_sent_bytes += sent_bytes;
@@ -102,7 +99,7 @@ start_data_transfer(char *cipher_text,
 	
     }
 
-    sent_bytes = send(cryp_sock_fd, hmac, strlen(hmac), 0);
+    sent_bytes = send(enc->sock_id, enc->hmac, strlen(enc->hmac), 0);
 
     printf("\tSent : %d \n", cum_sent_bytes + sent_bytes);
 
@@ -117,12 +114,13 @@ int main(int argc, char *argv[])
     Mode_t   mode = UNDEFINED;
 
     char    *server_ip = NULL;
-    char    *key = NULL;
     char    *cipher_text = NULL;
     char    *hmac = NULL;
     int     server_port = 0;
     int     f_size = 0;
     FILE    *fptr_read = NULL;
+
+    Enc_Dec_Apparatus_t *enc = (Enc_Dec_Apparatus_t *) malloc (sizeof(Enc_Dec_Apparatus_t));
 
     if(argc < 3) {
 
@@ -169,25 +167,27 @@ int main(int argc, char *argv[])
 
     f_size = get_file_size(fptr_read);
 
-    /* TODO: you have to free key Finally : DONE */
-    key = generate_passkey();
+    generate_passkey(enc);
 
-    if(NULL == key) 
+    if(NULL == enc->key) 
     {
 	printf("Key generation Failed....exiting with 1");
 	exit(1);
     }
 
-    /* TODO: you have to free cipher_text after writing to file : DONE */
-    cipher_text = encrypt_file_data(fptr_read, key, f_size);
+    ret_status = encrypt_file_data(fptr_read, enc, f_size);
 
-    if(NULL == cipher_text) {
+    if( ret_status != SUCCESS || NULL == enc->cipher_text) {
 	printf("Encryption Failed....exiting with 1");
 	exit(1);
     }
 
-    /* TODO: you have to free hmac Finally : DONE */
-    hmac = generate_hmac(cipher_text, key, f_size);
+    ret_status = generate_hmac(enc, f_size);
+
+    if( ret_status != SUCCESS ) {
+	printf("Message Authentication....exiting with 1");
+	exit(1);
+    }
 
     switch(mode) {
 
@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
 	    {
 		ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
 
-		ret_status = init_secure_connection(server_port, server_ip);
+		ret_status = init_secure_connection(enc, server_port, server_ip);
 
 		if(SUCCESS != ret_status) {
 		    printf("Connection establishment failed \n");
@@ -205,14 +205,13 @@ int main(int argc, char *argv[])
 		    printf("Connected !! \n");
 		}
 
-		ret_status = start_data_transfer(cipher_text, hmac, f_size);
+		ret_status = start_data_transfer(enc, f_size);
 	    }
 	    break;
 
 	case LOCAL:
 	    {
     		FILE   *fptr_write = NULL;
-		int    write_len = strlen(cipher_text) + strlen(hmac);
 
 		strcat(argv[1], ".uf");
 
@@ -226,11 +225,10 @@ int main(int argc, char *argv[])
 
     		fptr_write = fopen(argv[1], "w+");
 
-		cipher_text = (char *) realloc (cipher_text, write_len);
-
-		strcat(cipher_text, hmac);
-		
-		fwrite(cipher_text, 1, write_len, fptr_write);
+		fwrite(enc->iv, 1, IV_LEN, fptr_write);
+		fwrite(SALT, 1, SALT_LEN, fptr_write);
+		fwrite(enc->cipher_text, 1, strlen(cipher_text), fptr_write);
+		fwrite(enc->hmac, 1, HASH_SZ, fptr_write);
 
 		fclose(fptr_write);
 
@@ -238,12 +236,13 @@ int main(int argc, char *argv[])
 	    break;
     };
     
-    FREE(key);
-    FREE(cipher_text);
-    FREE(hmac);
+    FREE(enc->key);
+    FREE(enc->cipher_text);
+    FREE(enc->hmac);
+    close(enc->sock_id);
+    FREE(enc);
 
     fclose(fptr_read);
-    close(cryp_sock_fd);
 
     return 0;
 }

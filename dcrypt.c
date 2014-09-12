@@ -17,31 +17,32 @@ void how_to_use()
 
 Error_t
 receive_remote_data(int   conn_fd, 
-		    char  *recv_buffer,
+		    Enc_Dec_Apparatus_t  *dec,
 		    FILE  *write_fptr)
 {
     int read_bytes = 0;
 
-    read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
+    read_bytes = recv(conn_fd, dec->recv_buffer, BUFFER_SIZE, 0);
 
     if(read_bytes == -1) {
 	return RECV_FAIL;
     }
-    fwrite(recv_buffer, 1, read_bytes, write_fptr);
+    fwrite(dec->recv_buffer, 1, read_bytes, write_fptr);
     
     printf(" Read %d \n", read_bytes);
 
     while(read_bytes > 0) {
-    	read_bytes = recv(conn_fd, recv_buffer, BUFFER_SIZE, 0);
+    	read_bytes = recv(conn_fd, dec->recv_buffer, BUFFER_SIZE, 0);
     	printf(" Read %d \n", read_bytes);
-    	fwrite(recv_buffer, 1, read_bytes, write_fptr);
+    	fwrite(dec->recv_buffer, 1, read_bytes, write_fptr);
     }
 
     return SUCCESS;
 }
 
 Error_t
-wait_for_secure_connection(int server_port, 
+wait_for_secure_connection(Enc_Dec_Apparatus_t *dec,
+			   int server_port, 
 			   FILE *fptr,
 			   int  *conn_fd)
 {
@@ -52,9 +53,9 @@ wait_for_secure_connection(int server_port,
 
     struct sockaddr_in client_addr;
 
-    dec_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    dec->sock_id = socket(AF_INET, SOCK_STREAM, 0);
 
-    if(dec_sock_fd < 0) {
+    if(dec->sock_id < 0) {
 
 	printf("\n Error opening socket");
 	return SOCKET_FAIL;
@@ -66,7 +67,7 @@ wait_for_secure_connection(int server_port,
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(server_port);
 
-    ret_status = bind( dec_sock_fd, 
+    ret_status = bind( dec->sock_id, 
 	    	      (struct sockaddr *) &server_addr, 
 		      sizeof(server_addr));
 
@@ -76,7 +77,7 @@ wait_for_secure_connection(int server_port,
 	return BIND_FAIL;
     }
 
-    ret_status = listen(dec_sock_fd, 10);
+    ret_status = listen(dec->sock_id, 10);
 
     if(ret_status < 0) {
 
@@ -86,7 +87,7 @@ wait_for_secure_connection(int server_port,
 
     sock_len = sizeof(struct sockaddr_in);
 
-    *conn_fd = accept( dec_sock_fd, 
+    *conn_fd = accept( dec->sock_id, 
 	    	       (struct sockaddr *) &client_addr, 
 		       (socklen_t *) &sock_len);
 
@@ -110,6 +111,7 @@ int main(int argc, char *argv[])
     Mode_t mode = UNDEFINED;
 
     char    *key = NULL;
+    Enc_Dec_Apparatus_t *dec = (Enc_Dec_Apparatus_t *) malloc (sizeof(Enc_Dec_Apparatus_t));
 
     if(argc < 3) {
         printf("ERROR: Insufficient/Incorrect Arguments\n");
@@ -161,14 +163,14 @@ int main(int argc, char *argv[])
 		    return FOPEN_FAIL;
 		}
 
-		ret_status = wait_for_secure_connection(server_port, write_fptr, &conn_fd);
+		ret_status = wait_for_secure_connection(dec, server_port, write_fptr, &conn_fd);
 
 		if(SUCCESS != ret_status) {
 		    printf("No Incoming Connection\n");
 		    return RECV_FAIL;
 		}
 
-		ret_status = receive_remote_data(conn_fd, recv_buffer, write_fptr);
+		ret_status = receive_remote_data(conn_fd, dec, write_fptr);
 		fclose(write_fptr);
 
 		if(SUCCESS != ret_status) {
@@ -176,22 +178,21 @@ int main(int argc, char *argv[])
 		    return RECV_FAIL;
 		}
 
-		key = generate_passkey();
+		generate_passkey(dec);
 
-		if(NULL == key) {
+		if(NULL == dec->key) {
 		    printf("Key generation Failed....existing with 1");
 		    exit(1);
 		}
 
-		decrypt_file_data(argv[1], key);
+		ret_status = decrypt_file_data(argv[1], dec);
 
 		remove_hmac(argv[1]);
 
 		verify_hmac();
 
-
 		close(conn_fd);
-    		close(dec_sock_fd);
+    		close(dec->sock_id);
 	    }
 	    break;
 

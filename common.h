@@ -34,9 +34,6 @@ struct sockaddr_in server_addr;
 #define HASH_ALGO GCRY_MD_SHA512
 #define HASH_SZ 64
 
-char send_buffer[BUFFER_SIZE];
-char recv_buffer[BUFFER_SIZE];
-
 typedef enum mode {
     REMOTE,
     LOCAL,
@@ -59,19 +56,36 @@ typedef enum errors {
     FREAD_FAIL,
     FWRITE_FAIL,
     FOPEN_FAIL,
+    HMAC_FAIL,
     UNEXPECTED
 } 
 Error_t;
 
+struct enc_dec_apparatus
+{
+    int  sock_id;
 
+    char *key;
+    char *salt;
+    char *cipher_text;
+    char *hmac;
+    
+    unsigned long int iv;
+    
+    char send_buffer[BUFFER_SIZE];
+    char recv_buffer[BUFFER_SIZE];
+};
 
-char* generate_passkey();
+typedef struct enc_dec_apparatus 
+		Enc_Dec_Apparatus_t;
 
-char* encrypt_file_data(FILE *fptr, char *key, int file_size);
+void generate_passkey(Enc_Dec_Apparatus_t *eda);
 
-char* generate_hmac(char *cipher,
-		    char *key,
-		    int  f_size);
+Error_t encrypt_file_data(FILE *fptr, 
+			  Enc_Dec_Apparatus_t *enc, 
+			  int file_size);
 
-int get_file_size(FILE *fptr);
+Error_t generate_hmac(Enc_Dec_Apparatus_t *eda,
+		      int  f_size);
+
 #endif
