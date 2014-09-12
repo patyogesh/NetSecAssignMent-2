@@ -171,12 +171,16 @@ int main(int argc, char *argv[])
 		}
 
 		ret_status = receive_remote_data(conn_fd, dec, write_fptr);
-		fclose(write_fptr);
+
 
 		if(SUCCESS != ret_status) {
 		    printf("Receive Failed\n");
 		    return RECV_FAIL;
 		}
+
+		fclose(write_fptr);
+		close(conn_fd);
+    		close(dec->sock_id);
 
 		generate_passkey(dec);
 
@@ -185,14 +189,24 @@ int main(int argc, char *argv[])
 		    exit(1);
 		}
 
+		ret_status = verify_hmac(argv[1], dec);
+
+		if(SUCCESS != ret_status) {
+		    printf("HMAC verification failed\n");
+		}
+		else {
+		    printf("HMAC verification Success\n");
+		}
+
 		ret_status = decrypt_file_data(argv[1], dec);
 
-		remove_hmac(argv[1]);
+		if(SUCCESS != ret_status) {
+		    printf("Decryption failed\n");
+		}
+		else {
+		    printf("Decryption Success\n");
+		}
 
-		verify_hmac();
-
-		close(conn_fd);
-    		close(dec->sock_id);
 	    }
 	    break;
 
@@ -212,5 +226,10 @@ int main(int argc, char *argv[])
     };
 
 
+    FREE(dec->key);
+    FREE(dec->salt);
+    FREE(dec->cipher_text);
+    FREE(dec->hmac);
+    FREE(dec);
     return 0;
 }

@@ -88,4 +88,10 @@ Error_t encrypt_file_data(FILE *fptr,
 Error_t generate_hmac(Enc_Dec_Apparatus_t *eda,
 		      int  f_size);
 
+#define FREE(b) {\
+    if(b) {\
+	free(b);\
+	b = NULL;\
+    }\
+}
 #endif

@@ -23,7 +23,11 @@ void
 generate_passkey(Enc_Dec_Apparatus_t *enc)                                                                                                                                                      
 {                                                                                                                                                                       
     char password[MAX_PASSWORD_LEN];
+    
     enc->key = (char *) malloc(sizeof(char) * KEY_LEN); 
+
+    enc->salt = (char *) malloc(sizeof(char) * SALT_LEN);
+    strcpy(enc->salt, SALT);
                                                                                                                                                                         
     printf("Password : ");                                                                                                                                              
     scanf("%s", password);                                                                                                                                              
@@ -35,9 +39,9 @@ generate_passkey(Enc_Dec_Apparatus_t *enc)
     gcry_kdf_derive(password,                                                                                                                                           
                     strlen(password),                                                                                                                                   
                     GCRY_KDF_PBKDF2,                                                                                                                                    
-                    GCRY_MD_SHA512,                                                                                                                                     
-                    SALT,                                                                                                                                             
-                    SALT_LEN,                                                                                                                                     
+                    GCRY_MD_SHA512,
+		    enc->salt,
+		    SALT_LEN,
                     ITERATIONS,
                     KEY_LEN,                                                                                                                                 
                     enc->key);                                                                                                                                        
@@ -75,17 +79,17 @@ Error_t  _encrypt(Enc_Dec_Apparatus_t *enc,
     plain_txt_len = send_buff_len;
 
     gcry_err = gcry_cipher_open(&handle, ENCRYPTION_ALGO, ENCRYPTION_MODE, GCRY_CIPHER_CBC_CTS);
-    CHECK_GCRY_ERROR(gcry_err, "gcry_cipher_open");
+    CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_open");
 
     gcry_err = gcry_cipher_setkey(handle, enc->key, key_len);
-    CHECK_GCRY_ERROR(gcry_err, "gcry_cipher_setkey");
+    CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setkey");
 
     enc->iv = IV;
     gcry_err = gcry_cipher_setiv(handle, &enc->iv, block_len);
-    CHECK_GCRY_ERROR(gcry_err, "gcry_cipher_setiv");
+    CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setiv");
 
     gcry_err = gcry_cipher_encrypt(handle, enc->cipher_text, send_buff_len, enc->send_buffer, plain_txt_len);
-    CHECK_GCRY_ERROR(gcry_err, "gcry_cipher_encrypt");
+    CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_encrypt");
 
     gcry_cipher_close(handle);
 
@@ -168,8 +172,8 @@ remove_hmac(char *file_name)
     return hmac;
 }
 
-int
-verify_hmac(Enc_Dec_Apparatus_t *dec,
+Error_t
+_verify_hmac(Enc_Dec_Apparatus_t *dec,
 	    char *rcvd_hmac,
 	    int  f_size)
 {
@@ -184,64 +188,97 @@ verify_hmac(Enc_Dec_Apparatus_t *dec,
 
 
 Error_t
-decrypt_file_data(char *file_name,
-		  Enc_Dec_Apparatus_t *dec)
+verify_hmac(char *file_name,
+	    Enc_Dec_Apparatus_t *dec)
 {
     int f_size;
     int read_bytes;
 
-    FILE  *fptr = fopen(file_name, "r+");
-
-    int offset = fseek(fptr, 4, SEEK_SET);
-
-    fread(&dec->iv, 1, IV_LEN, fptr);
-
-    dec->salt = (char *) malloc (SALT_LEN);
-    fread(dec->salt, 1, SALT_LEN, fptr);
-
-    fclose(fptr);
-
-    printf("Got IV  and SALT\n");
-    
-    fptr = fopen(file_name, "r+");
+    FILE *fptr = fopen(file_name, "r+");
     f_size = get_file_size(fptr);
     fclose(fptr);
 
-    /* Remove IV+SALT */
-    f_size -= (4 + 8);
-    
+
     fptr = fopen(file_name, "r+");
 
-    fseek(fptr, (4 + 8), SEEK_SET);
-
-    dec->cipher_text = (char *) malloc(f_size - 64);
-    read_bytes = fread(dec->cipher_text, (f_size - 64), 1, fptr);
+    int payload_size = f_size - (IV_LEN + SALT_LEN + HASH_SZ);
+    dec->cipher_text = (char *) malloc(payload_size);
+    read_bytes = fread(dec->cipher_text, payload_size, 1, fptr);
 
     if(read_bytes < 0) {
 	printf("File Read Failed while reading ciphertext\n");
 	return FAILURE;
     }
 
+    printf("Read %d bytes \n", read_bytes);
+
+    fread(&dec->iv, 1, IV_LEN, fptr);
+    printf("Got IV  \n");
+
+    dec->salt = (char *) malloc (SALT_LEN);
+    fread(dec->salt, 1, SALT_LEN, fptr);
+    printf("Got SALT  \n");
+
+
     char *rcvd_hmac = (char *) malloc(HASH_SZ);
     read_bytes = fread(rcvd_hmac, HASH_SZ, 1, fptr);
 
-    if(read_bytes < 0) {
-	printf("File Read Failed while reading hmac\n");
-	return FAILURE;
-    }
+    printf("HMAC verification \n");
+
+    int h = _verify_hmac(dec, rcvd_hmac, f_size);
+
     fclose(fptr);
 
+    return h;;
+}
 
-    printf("HMAC verification \n");
-    int h = verify_hmac(dec, rcvd_hmac, f_size);
+Error_t
+_decrypt(int f_size,
+	 Enc_Dec_Apparatus_t *dec)
+{
+    gcry_error_t gcry_err;
 
-    if(h) {
-	printf("HMAC verification failed\n");
-	return FAILURE;
-    }
-    else {
-	printf("HMAC verification Success\n");
-    }
+    size_t  key_len;
+    size_t  block_len;
+
+    int payload_len = (f_size - (IV_LEN + SALT_LEN + HASH_SZ));
+    size_t  plain_txt_len = payload_len;
+
+    char*   plain_text = (char *) malloc (plain_txt_len);
+
+    gcry_cipher_hd_t handle;
+
+    key_len = gcry_cipher_get_algo_keylen(ENCRYPTION_ALGO);
+
+    block_len = gcry_cipher_get_algo_blklen(ENCRYPTION_MODE);
+
+    gcry_err = gcry_cipher_open(&handle, ENCRYPTION_ALGO, ENCRYPTION_MODE, GCRY_CIPHER_CBC_CTS);
+    CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_open");
+
+    gcry_err = gcry_cipher_setkey(handle, dec->key, key_len);
+    CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setkey");
+
+    gcry_err = gcry_cipher_setiv(handle, &dec->iv, block_len);
+    CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setiv");
+
+    gcry_err = gcry_cipher_decrypt(handle, plain_text, plain_txt_len, dec->cipher_text, strlen(dec->cipher_text));
+    CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_decrypt");
+
+    gcry_cipher_close(handle);
+
+    puts(plain_text);
 
     return SUCCESS;
+}
+Error_t
+decrypt_file_data(char *file_name,
+	    	  Enc_Dec_Apparatus_t *dec)
+{
+
+    FILE *fptr = fopen(file_name, "r+");
+    int f_size = get_file_size(fptr);
+    fclose(fptr);
+
+    return _decrypt(f_size, dec);
+    
 }

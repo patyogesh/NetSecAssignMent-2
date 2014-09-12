@@ -1,12 +1,5 @@
 #include "common.h"
 
-#define FREE(buf) {\
-    if(buf) {\
-	free(buf);\
-	buf = NULL;\
-    }\
-}
-
 void 
 how_to_use() 
 {
@@ -82,9 +75,25 @@ start_data_transfer(Enc_Dec_Apparatus_t *enc,
     ssize_t sent_bytes = 0;
     ssize_t cum_sent_bytes = 0;
 
-    size = strlen(enc->cipher_text);
+    size += IV_LEN +
+	    SALT_LEN +
+	    HASH_SZ;
 
-    printf("\n Cipher Size %d \t hmac %d", strlen(enc->cipher_text), strlen(enc->hmac));
+    enc->cipher_text = realloc(enc->cipher_text, size);
+
+    char *ptr = enc->cipher_text;
+    ptr += strlen(enc->cipher_text);
+
+    memcpy(ptr, &enc->iv, IV_LEN);
+    ptr += IV_LEN;
+
+    memcpy(ptr, enc->salt, SALT_LEN);
+    ptr += SALT_LEN;
+
+    memcpy(ptr, enc->hmac, HASH_SZ);
+
+
+    printf("\n Cipher Size %d \t hmac %d", strlen(enc->cipher_text), size);
     while(1) {
 	
 	sent_bytes = send(enc->sock_id, enc->cipher_text, size, 0);
@@ -98,8 +107,6 @@ start_data_transfer(Enc_Dec_Apparatus_t *enc,
 	}
 	
     }
-
-    sent_bytes = send(enc->sock_id, enc->hmac, strlen(enc->hmac), 0);
 
     printf("\tSent : %d \n", cum_sent_bytes + sent_bytes);
 
@@ -185,7 +192,7 @@ int main(int argc, char *argv[])
     ret_status = generate_hmac(enc, f_size);
 
     if( ret_status != SUCCESS ) {
-	printf("Message Authentication....exiting with 1");
+	printf("Message Authentication Failed....exiting with 1");
 	exit(1);
     }
 
@@ -206,6 +213,8 @@ int main(int argc, char *argv[])
 		}
 
 		ret_status = start_data_transfer(enc, f_size);
+    		
+		close(enc->sock_id);
 	    }
 	    break;
 
@@ -225,9 +234,9 @@ int main(int argc, char *argv[])
 
     		fptr_write = fopen(argv[1], "w+");
 
-		fwrite(enc->iv, 1, IV_LEN, fptr_write);
-		fwrite(SALT, 1, SALT_LEN, fptr_write);
-		fwrite(enc->cipher_text, 1, strlen(cipher_text), fptr_write);
+		fwrite(&enc->iv, 1, IV_LEN, fptr_write);	
+		fwrite(enc->salt, 1, SALT_LEN, fptr_write);
+		fwrite(enc->cipher_text, 1, strlen(enc->cipher_text), fptr_write);
 		fwrite(enc->hmac, 1, HASH_SZ, fptr_write);
 
 		fclose(fptr_write);
@@ -237,9 +246,9 @@ int main(int argc, char *argv[])
     };
     
     FREE(enc->key);
+    FREE(enc->salt);
     FREE(enc->cipher_text);
     FREE(enc->hmac);
-    close(enc->sock_id);
     FREE(enc);
 
     fclose(fptr_read);
