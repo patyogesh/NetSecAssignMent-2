@@ -163,7 +163,7 @@ remove_hmac(char *file_name)
 
     fseek(fptr, (4 + 16), SEEK_SET);
 
-    char hmac = (char *) malloc(HASH_SZ);
+    char* hmac = (char *) malloc(HASH_SZ);
 
     fread(hmac, 1, HASH_SZ, fptr);
 
