@@ -41,10 +41,9 @@ receive_remote_data(int   conn_fd,
 }
 
 Error_t
-wait_for_secure_connection(Enc_Dec_Apparatus_t *dec,
-			   int server_port, 
-			   FILE *fptr,
-			   int  *conn_fd)
+wait_for_incoming_connection(Enc_Dec_Apparatus_t *dec,
+			     int server_port, 
+			     int  *conn_fd)
 {
     Error_t ret_status = SUCCESS;
 
@@ -104,14 +103,10 @@ wait_for_secure_connection(Enc_Dec_Apparatus_t *dec,
 
 int main(int argc, char *argv[])
 {
-    Error_t ret_status = SUCCESS;
+    Error_t	ret_status = SUCCESS;
+    Mode_t  	mode = UNDEFINED;
 
-    int bad_options = FALSE;
-    int server_port = 0;
-    Mode_t mode = UNDEFINED;
-
-    char    *key = NULL;
-    Enc_Dec_Apparatus_t *dec = (Enc_Dec_Apparatus_t *) malloc (sizeof(Enc_Dec_Apparatus_t));
+    int		bad_options = FALSE;
 
     if(argc < 3) {
         printf("ERROR: Insufficient/Incorrect Arguments\n");
@@ -121,13 +116,11 @@ int main(int argc, char *argv[])
 
     if(!strcmp("-d", argv[2])) 
     {
-
         if(argc < 4) { 
             bad_options = TRUE;
         }
 
         mode = REMOTE;
-        server_port = atoi(argv[3]);
     }
     
     else if(!strcmp("-l", argv[2])) 
@@ -149,13 +142,27 @@ int main(int argc, char *argv[])
     FILE *read_fptr = NULL;
     FILE *write_fptr = NULL;
 
+    Enc_Dec_Apparatus_t *dec = NULL;
+
+    ret_status = init(&dec);
+
+    if(SUCCESS != ret_status) {
+	printf("Failed to allocate memory \n");
+	exit(1);
+    }
+
     switch(mode) {
 
 	case REMOTE:
 	    {
+        	int server_port = atoi(argv[3]);
 		int conn_fd = 0;
 
-    		write_fptr = fopen(argv[1], "w+");
+		char *temp_file_name = (char *) malloc (strlen(argv[1])+3);
+		strcpy(temp_file_name, argv[1]);
+		strcat(temp_file_name, ".uf");
+
+    		write_fptr = fopen(temp_file_name, "w+");
 
 		if(NULL == write_fptr) {
 
@@ -163,7 +170,7 @@ int main(int argc, char *argv[])
 		    return FOPEN_FAIL;
 		}
 
-		ret_status = wait_for_secure_connection(dec, server_port, write_fptr, &conn_fd);
+		ret_status = wait_for_incoming_connection(dec, server_port, &conn_fd);
 
 		if(SUCCESS != ret_status) {
 		    printf("No Incoming Connection\n");
@@ -172,27 +179,66 @@ int main(int argc, char *argv[])
 
 		ret_status = receive_remote_data(conn_fd, dec, write_fptr);
 
+		close(conn_fd);
+    		close(dec->sock_id);
+		fclose(write_fptr);
 
 		if(SUCCESS != ret_status) {
 		    printf("Receive Failed\n");
 		    return RECV_FAIL;
 		}
 
-		fclose(write_fptr);
-		close(conn_fd);
-    		close(dec->sock_id);
-
 		generate_passkey(dec);
 
 		if(NULL == dec->key) {
-		    printf("Key generation Failed....existing with 1");
+		    printf("Key generation Failed....exiting with 1");
+		    exit(1);
+		}
+
+		ret_status = verify_hmac(temp_file_name, dec);
+
+		if(SUCCESS != ret_status) {
+		    printf("HMAC verification failed....exiting with error code (1) \n");
+		    exit(1);
+		}
+		else {
+		    printf("HMAC verification Success\n");
+		}
+
+		ret_status = decrypt_file_data(temp_file_name, argv[1], dec);
+
+		if(SUCCESS != ret_status) {
+		    printf("Decryption failed ....exiting with error code (1)\n");
+		    exit(1);
+		}
+
+		remove(temp_file_name);
+
+	    }
+	    break;
+
+	case LOCAL:
+	    {
+		FILE *fptr = fopen(argv[1], "r+");
+		if(NULL == fptr) {
+		    printf("File to decrypt does not exist....exiting with error code (1) \n");
+		    exit(1);
+		} 
+		else {
+		    fclose(fptr);
+		}
+		generate_passkey(dec);
+
+		if(NULL == dec->key) {
+		    printf("Key generation Failed....exiting with 1");
 		    exit(1);
 		}
 
 		ret_status = verify_hmac(argv[1], dec);
 
 		if(SUCCESS != ret_status) {
-		    printf("HMAC verification failed\n");
+		    printf("HMAC verification failed....exiting with error code (1) \n");
+		    exit(1);
 		}
 		else {
 		    printf("HMAC verification Success\n");
@@ -201,35 +247,18 @@ int main(int argc, char *argv[])
 		ret_status = decrypt_file_data(argv[1], dec);
 
 		if(SUCCESS != ret_status) {
-		    printf("Decryption failed\n");
+		    printf("Decryption failed ....exiting with error code (1)\n");
+		    exit(1);
 		}
 		else {
 		    printf("Decryption Success\n");
 		}
-
-	    }
-	    break;
-
-	case LOCAL:
-	    {
-    		read_fptr = fopen(argv[1], "w+");
-
-		if(NULL == read_fptr) {
-
-		    printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
-		    return FOPEN_FAIL;
-		}
-
-		fclose(read_fptr);
 	    }
 	    break;
     };
 
 
-    FREE(dec->key);
-    FREE(dec->salt);
-    FREE(dec->cipher_text);
-    FREE(dec->hmac);
-    FREE(dec);
-    return 0;
+    deinit(dec);
+
+    return SUCCESS;
 }

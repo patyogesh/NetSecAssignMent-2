@@ -8,6 +8,26 @@
     }\
 }
 
+Error_t
+init(Enc_Dec_Apparatus_t **eda)
+{
+    *eda = (Enc_Dec_Apparatus_t *) malloc(sizeof(Enc_Dec_Apparatus_t));
+    
+    if(*eda) {
+	return SUCCESS;
+    }
+
+    return FAILURE;
+}
+void
+deinit(Enc_Dec_Apparatus_t *eda)
+{
+    FREE(eda->key);
+    FREE(eda->salt);
+    FREE(eda->cipher_text);
+    FREE(eda->hmac);
+    FREE(eda);
+}
 int get_file_size(FILE *fptr)
 {
     int size = 0;
@@ -195,6 +215,7 @@ verify_hmac(char *file_name,
     int read_bytes;
 
     FILE *fptr = fopen(file_name, "r+");
+    
     f_size = get_file_size(fptr);
     fclose(fptr);
 
@@ -233,7 +254,8 @@ verify_hmac(char *file_name,
 }
 
 Error_t
-_decrypt(int f_size,
+_decrypt(char* file_name,
+	 int f_size,
 	 Enc_Dec_Apparatus_t *dec)
 {
     gcry_error_t gcry_err;
@@ -266,19 +288,36 @@ _decrypt(int f_size,
 
     gcry_cipher_close(handle);
 
+    FILE *fptr = fopen(file_name, "w+");
+
+    if(!fptr) {
+	printf("Error while writing to file during decryption....existing with error code (1) \n");
+	exit(1);
+    }
+
+    fwrite(plain_text, 1, payload_len, fptr);
+
+    fclose(fptr);
+
     puts(plain_text);
 
     return SUCCESS;
 }
 Error_t
-decrypt_file_data(char *file_name,
+decrypt_file_data(char *input_file_name,
+		  char *output_file_name,
 	    	  Enc_Dec_Apparatus_t *dec)
 {
 
-    FILE *fptr = fopen(file_name, "r+");
+    FILE *fptr = fopen(input_file_name, "r+");
+
+    if(NULL == fptr) {
+	return FOPEN_FAIL;
+    }
+
     int f_size = get_file_size(fptr);
     fclose(fptr);
 
-    return _decrypt(f_size, dec);
+    return _decrypt(output_file_name, f_size, dec);
     
 }
