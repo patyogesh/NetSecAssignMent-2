@@ -105,7 +105,7 @@ Error_t  _encrypt(Enc_Dec_Apparatus_t *enc,
     CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setkey");
 
     enc->iv = IV;
-    gcry_err = gcry_cipher_setiv(handle, &enc->iv, block_len);
+    gcry_err = gcry_cipher_setiv(handle, &enc->iv, 8);
     CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setiv");
 
     gcry_err = gcry_cipher_encrypt(handle, enc->cipher_text, send_buff_len, enc->send_buffer, plain_txt_len);
@@ -280,7 +280,7 @@ _decrypt(char* file_name,
     gcry_err = gcry_cipher_setkey(handle, dec->key, key_len);
     CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setkey");
 
-    gcry_err = gcry_cipher_setiv(handle, &dec->iv, block_len);
+    gcry_err = gcry_cipher_setiv(handle, &dec->iv, 8);
     CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setiv");
 
     gcry_err = gcry_cipher_decrypt(handle, plain_text, plain_txt_len, dec->cipher_text, strlen(dec->cipher_text));
