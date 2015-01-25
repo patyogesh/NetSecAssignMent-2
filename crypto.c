@@ -1,6 +1,19 @@
+/************************************************************************************
+*  A Secure copy tool for local and remote copy                                     *
+*                                                                                   *
+*  http://cise.ufl.edu/class/cnt5410fa14/hw/hw2.html                                *
+*                                                                                   *
+*  Author: Yogesh Patil (ypatil@cise.ufl.edu)                                       *
+************************************************************************************/
+
+
 #include "common.h"
 
 
+/*
+ * macro that checks if error occured, reports it and 
+ * return FAILURE
+ */
 #define CHECK_GCRY_ERROR(ret_val, func_call) {\
     if(ret_val) {\
 	printf("ERROR [%s: %d] Call to %s Failed..\n", __FUNCTION__,__LINE__, func_call);\
@@ -8,26 +21,39 @@
     }\
 }
 
+/*
+ * Allocates/Initializes memory for Enc_Dec_Apparatus_t
+ */
 Error_t
 init(Enc_Dec_Apparatus_t **eda)
 {
     *eda = (Enc_Dec_Apparatus_t *) malloc(sizeof(Enc_Dec_Apparatus_t));
     
     if(*eda) {
-	return SUCCESS;
+	    return SUCCESS;
     }
 
     return FAILURE;
 }
+
+/*
+ * Frees various buffers 
+ */
 void
 deinit(Enc_Dec_Apparatus_t *eda)
 {
+    FREE(eda->send_buffer);
+    FREE(eda->recv_buffer);
     FREE(eda->key);
     FREE(eda->salt);
     FREE(eda->cipher_text);
     FREE(eda->hmac);
     FREE(eda);
 }
+
+/*
+ * A utility function that returns file size
+ */
 int get_file_size(FILE *fptr)
 {
     int size = 0;
@@ -39,29 +65,27 @@ int get_file_size(FILE *fptr)
     return size;
 }
 
+/*
+ * This function takes user password and input
+ * Comutes HASH key for a password
+ */
 void 
-generate_passkey(Enc_Dec_Apparatus_t *enc)                                                                                                                                                      
-{                                                                                                                                                                       
+generate_passkey(Enc_Dec_Apparatus_t *enc)
+{
     char password[MAX_PASSWORD_LEN];
     
-    enc->key = (char *) malloc(sizeof(char) * KEY_LEN); 
-
-    enc->salt = (char *) malloc(sizeof(char) * SALT_LEN);
-    strcpy(enc->salt, SALT);
-                                                                                                                                                                        
     printf("Password : ");                                                                                                                                              
     scanf("%s", password);                                                                                                                                              
-                                                                                                                                                                        
     gcry_check_version(NULL);                                                                                                                                           
-                                                                                                                                                                        
+    enc->key = (char *) malloc(sizeof(char) * KEY_LEN); 
     memset(enc->key, '\0', KEY_LEN);                                                                                                                       
 
     gcry_kdf_derive(password,                                                                                                                                           
                     strlen(password),                                                                                                                                   
                     GCRY_KDF_PBKDF2,                                                                                                                                    
                     GCRY_MD_SHA512,
-		    enc->salt,
-		    SALT_LEN,
+		            enc->salt,
+		            SALT_LEN,
                     ITERATIONS,
                     KEY_LEN,                                                                                                                                 
                     enc->key);                                                                                                                                        
@@ -71,15 +95,20 @@ generate_passkey(Enc_Dec_Apparatus_t *enc)
 
     printf("Key: ");
     while(i < KEY_LEN) {
-	printf("%X ", *ptr);
-	ptr++;
-	i++;
+        printf("%X ", *ptr);
+        ptr++;
+        i++;
     }
     printf("\n");
 }
 
 
-Error_t  _encrypt(Enc_Dec_Apparatus_t *enc, 
+/*
+ * This is core encryption function that converts
+ * plain text to cipher text
+ */
+Error_t  
+_encrypt(Enc_Dec_Apparatus_t *enc, 
 	     	int  send_buff_len)
 {
     gcry_error_t gcry_err;
@@ -105,7 +134,7 @@ Error_t  _encrypt(Enc_Dec_Apparatus_t *enc,
     CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setkey");
 
     enc->iv = IV;
-    gcry_err = gcry_cipher_setiv(handle, &enc->iv, 8);
+    gcry_err = gcry_cipher_setiv(handle, &enc->iv, block_len);
     CHECK_GCRY_ERROR(gcry_err, "(Encyption) gcry_cipher_setiv");
 
     gcry_err = gcry_cipher_encrypt(handle, enc->cipher_text, send_buff_len, enc->send_buffer, plain_txt_len);
@@ -116,6 +145,9 @@ Error_t  _encrypt(Enc_Dec_Apparatus_t *enc,
     return SUCCESS;
 }
 
+/*
+ * Wrapper function for encryption
+ */
 Error_t
 encrypt_file_data(FILE *fptr,
 		  Enc_Dec_Apparatus_t *enc,
@@ -123,19 +155,24 @@ encrypt_file_data(FILE *fptr,
 {
     int read_bytes;
 
-    while(!feof(fptr)) {
-	read_bytes = fread(enc->send_buffer, f_size, 1, fptr);
+    enc->send_buffer = (char *) malloc (f_size);
 
-	if(read_bytes < 0) {
-	    printf("File Read Failed\n");
-	    return FAILURE;
-	}
+    while(!feof(fptr)) {
+        read_bytes = fread(enc->send_buffer, f_size, 1, fptr);
+
+        if(read_bytes < 0) {
+            printf("File Read Failed\n");
+            return FAILURE;
+        }
     }
 
     return _encrypt(enc, f_size);
 }
 
 
+/*
+ * core function that computes HMAC for 
+ */
 Error_t
 _hmac(Enc_Dec_Apparatus_t *eda,
       int  f_size)
@@ -156,57 +193,109 @@ _hmac(Enc_Dec_Apparatus_t *eda,
     gcry_err = gcry_md_setkey(handle, eda->key, KEY_LEN);
     CHECK_GCRY_ERROR(gcry_err, "gcry_md_setkey");
 
-    gcry_md_write(handle, eda->cipher_text, strlen(eda->cipher_text));
+    gcry_md_write(handle, eda->cipher_text, f_size);
 
     hash_val = gcry_md_read(handle, HASH_ALGO);
 
     memcpy(eda->hmac, hash_val, HASH_SZ);
 
     if(NULL == eda->hmac) {
-	return HMAC_FAIL;
+        return HMAC_FAIL;
     }
 
     gcry_md_close(handle);
 
     return SUCCESS;
 }
+/*
+ * Wrapper function for HMAC computation
+ * Call after encryption
+ */
 Error_t
 generate_hmac(Enc_Dec_Apparatus_t *enc,
 	      int  f_size)
 {
     return _hmac(enc, f_size);
 }
-char*
-remove_hmac(char *file_name)
-{
-    FILE *fptr = fopen(file_name, "r+");
 
-    fseek(fptr, (4 + 16), SEEK_SET);
-
-    char* hmac = (char *) malloc(HASH_SZ);
-
-    fread(hmac, 1, HASH_SZ, fptr);
-
-    fclose(fptr);
-
-    return hmac;
-}
-
+/*
+ * Wrapper function to verify HMAC
+ * To be called before decryption
+ */
 Error_t
 _verify_hmac(Enc_Dec_Apparatus_t *dec,
 	    char *rcvd_hmac,
 	    int  f_size)
 {
-     int ret = _hmac(dec, f_size);
+    int ret = _hmac(dec, (f_size - (IV_LEN + SALT_LEN + HASH_SZ)));
 
-     if(SUCCESS != ret) {
-	 return HMAC_FAIL;
-     }
+    if(SUCCESS != ret) {
+        return HMAC_FAIL;
+    }
 
-     return memcmp(dec->hmac, rcvd_hmac, HASH_SZ);
+    return memcmp(dec->hmac, rcvd_hmac, HASH_SZ);
 }
 
+/*
+ * Generic utility  function that derives the cryptographic information
+ * from file to be decrypted
+ */
+Error_t
+retrieve_cryto_params(char *file_name,
+	                  Enc_Dec_Apparatus_t *dec)
+{
+    int f_size;
+    int read_bytes;
 
+    FILE *fptr = fopen(file_name, "rb");
+
+    f_size = get_file_size(fptr);
+    fclose(fptr);
+
+
+    fptr = fopen(file_name, "rb");
+
+    /* Read Ciphertext */
+    int payload_size = f_size - (IV_LEN + SALT_LEN + HASH_SZ);
+    dec->cipher_text = (char *) malloc(payload_size);
+    read_bytes = fread(dec->cipher_text, payload_size, 1, fptr);
+
+    if(read_bytes < 0) {
+        printf("File Read Failed while reading ciphertext\n");
+        fclose(fptr);
+        return FAILURE;
+    }
+
+    /* Read IV */
+    fseek(fptr, payload_size, SEEK_SET);
+    read_bytes = fread(&dec->iv, 1, IV_LEN, fptr);
+
+    if(read_bytes < 0) {
+        printf("File Read Failed while reading IV\n");
+        fclose(fptr);
+        return FAILURE;
+    }
+
+    /* Read SALT */
+    fseek(fptr, (payload_size + IV_LEN), SEEK_SET);
+    dec->salt = (char *) malloc (SALT_LEN);
+    read_bytes = fread(dec->salt, 1, SALT_LEN, fptr);
+
+    if(read_bytes < 0) {
+        printf("File Read Failed while reading SALT\n");
+        fclose(fptr);
+        return FAILURE;
+    }
+
+    /* Read HMAC finally at the time of HMAC verification */
+    fclose(fptr);
+    return SUCCESS;
+}
+
+/*
+ * Wrapper function to verify HMAC
+ * To be called before decryption
+ */
 Error_t
 verify_hmac(char *file_name,
 	    Enc_Dec_Apparatus_t *dec)
@@ -214,37 +303,19 @@ verify_hmac(char *file_name,
     int f_size;
     int read_bytes;
 
-    FILE *fptr = fopen(file_name, "r+");
+    FILE *fptr = fopen(file_name, "rb");
     
     f_size = get_file_size(fptr);
     fclose(fptr);
 
-
-    fptr = fopen(file_name, "r+");
-
     int payload_size = f_size - (IV_LEN + SALT_LEN + HASH_SZ);
-    dec->cipher_text = (char *) malloc(payload_size);
-    read_bytes = fread(dec->cipher_text, payload_size, 1, fptr);
-
-    if(read_bytes < 0) {
-	printf("File Read Failed while reading ciphertext\n");
-	return FAILURE;
-    }
-
-    printf("Read %d bytes \n", read_bytes);
-
-    fread(&dec->iv, 1, IV_LEN, fptr);
-    printf("Got IV  \n");
-
-    dec->salt = (char *) malloc (SALT_LEN);
-    fread(dec->salt, 1, SALT_LEN, fptr);
-    printf("Got SALT  \n");
-
-
+    fptr = fopen(file_name, "rb");
+    
+    fseek(fptr, (payload_size + IV_LEN + SALT_LEN), SEEK_SET);
+    
     char *rcvd_hmac = (char *) malloc(HASH_SZ);
-    read_bytes = fread(rcvd_hmac, HASH_SZ, 1, fptr);
 
-    printf("HMAC verification \n");
+    read_bytes = fread(rcvd_hmac, HASH_SZ, 1, fptr);
 
     int h = _verify_hmac(dec, rcvd_hmac, f_size);
 
@@ -253,6 +324,9 @@ verify_hmac(char *file_name,
     return h;;
 }
 
+/*
+ * core decryption function
+ */
 Error_t
 _decrypt(char* file_name,
 	 int f_size,
@@ -280,44 +354,50 @@ _decrypt(char* file_name,
     gcry_err = gcry_cipher_setkey(handle, dec->key, key_len);
     CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setkey");
 
-    gcry_err = gcry_cipher_setiv(handle, &dec->iv, 8);
+    gcry_err = gcry_cipher_setiv(handle, &dec->iv, block_len);
     CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_setiv");
 
-    gcry_err = gcry_cipher_decrypt(handle, plain_text, plain_txt_len, dec->cipher_text, strlen(dec->cipher_text));
+    gcry_err = gcry_cipher_decrypt(handle, plain_text, plain_txt_len, dec->cipher_text, payload_len);
     CHECK_GCRY_ERROR(gcry_err, "(Decryption) gcry_cipher_decrypt");
 
     gcry_cipher_close(handle);
 
-    FILE *fptr = fopen(file_name, "w+");
+
+    // FIX ME- DONE
+    FILE *fptr = fopen(file_name, "wb");
 
     if(!fptr) {
-	printf("Error while writing to file during decryption....existing with error code (1) \n");
-	exit(1);
+        printf("Error while writing to file during decryption....existing with error code (1) \n");
+        exit(1);
     }
 
     fwrite(plain_text, 1, payload_len, fptr);
 
-    fclose(fptr);
+    dec->plain_text_len = plain_txt_len;
 
-    puts(plain_text);
+    fclose(fptr);
 
     return SUCCESS;
 }
+
+/*
+ * wrapper function to decrypt the file 
+ */
 Error_t
 decrypt_file_data(char *input_file_name,
 		  char *output_file_name,
 	    	  Enc_Dec_Apparatus_t *dec)
 {
 
-    FILE *fptr = fopen(input_file_name, "r+");
+    FILE *fptr = fopen(input_file_name, "rb");
 
     if(NULL == fptr) {
-	return FOPEN_FAIL;
+        return FOPEN_FAIL;
     }
 
     int f_size = get_file_size(fptr);
     fclose(fptr);
 
     return _decrypt(output_file_name, f_size, dec);
-    
+
 }

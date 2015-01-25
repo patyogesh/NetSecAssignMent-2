@@ -1,5 +1,17 @@
+/************************************************************************************                                                                           
+*  A Secure copy tool for local and remote copy                                     *                                                                           
+*                                                                                   *                                                                           
+*  http://cise.ufl.edu/class/cnt5410fa14/hw/hw2.html                                *                                                                           
+*                                                                                   *                                                                           
+*  Author: Yogesh Patil (ypatil@cise.ufl.edu)                                       *                                                                           
+************************************************************************************/
+
 #include "common.h"
 
+/*
+ * Utility function that prints the 'how to use'
+ * the gatorcrypt and gatordec utilities
+ */
 void 
 how_to_use() 
 {
@@ -12,15 +24,21 @@ how_to_use()
     printf("     Local Mode: dump file to local machines\n");
 }
 
+/*
+ * Initializes connection to remote machine
+ * Opens socket and connects to remote machine
+ */
 Error_t
 init_secure_connection(Enc_Dec_Apparatus_t *enc, int server_port, char *server_ip)
 {
+    struct sockaddr_in server_addr;
+
     enc->sock_id = socket(AF_INET, SOCK_STREAM, 0);
 
     if(enc->sock_id < 0) {
 
-	printf("\n Error opening socket");
-	return SOCKET_FAIL;
+        printf("\n Error opening socket");
+        return SOCKET_FAIL;
     }
 
     memset(&server_addr, '0', sizeof(server_addr));
@@ -30,20 +48,24 @@ init_secure_connection(Enc_Dec_Apparatus_t *enc, int server_port, char *server_i
 
     if(inet_pton(AF_INET, server_ip, &server_addr.sin_addr) < 0) {
 
-	printf("inet_pton Error\n");
-	return CLIENT_FAIL;
+        printf("inet_pton Error\n");
+        return CLIENT_FAIL;
     }
 
     if(connect(enc->sock_id, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 
-	printf("Error while connecting to server\n");
-	return CONNECT_FAIL;
+        printf("Error while connecting to server\n");
+        return CONNECT_FAIL;
     }
 
     return SUCCESS;
 }
 
 
+/*
+ * Utility function to extract server IP address and port number
+ * from given command line arguments
+ */
 Error_t
 extract_server_ip_port(char *args, char **server_ip, int *server_port)
 {
@@ -51,16 +73,16 @@ extract_server_ip_port(char *args, char **server_ip, int *server_port)
 
     *server_ip = args;
     while(args[i] != ':') {
-	i++;
+        i++;
     }
     args[i] = '\0';
     i++;
 
     char port[5];
     while(args[i]) {
-	port[j] = args[i];
-	j++;
-	i++;
+        port[j] = args[i];
+        j++;
+        i++;
     }
     port[j] = '\0';
 
@@ -68,6 +90,9 @@ extract_server_ip_port(char *args, char **server_ip, int *server_port)
     return 0;
 }
 
+/*
+ *
+ */
 Error_t
 start_data_transfer(Enc_Dec_Apparatus_t *enc,
 		    int  size)
@@ -82,7 +107,7 @@ start_data_transfer(Enc_Dec_Apparatus_t *enc,
     enc->cipher_text = realloc(enc->cipher_text, size);
 
     char *ptr = enc->cipher_text;
-    ptr += strlen(enc->cipher_text);
+    ptr += size - (IV_LEN + SALT_LEN + HASH_SZ);
 
     memcpy(ptr, &enc->iv, IV_LEN);
     ptr += IV_LEN;
@@ -93,27 +118,29 @@ start_data_transfer(Enc_Dec_Apparatus_t *enc,
     memcpy(ptr, enc->hmac, HASH_SZ);
 
 
-    printf("\n Cipher Size %d \t hmac %d", strlen(enc->cipher_text), size);
     while(1) {
-	
-	sent_bytes = send(enc->sock_id, enc->cipher_text, size, 0);
 
-	if(sent_bytes >= 0) {
-	    cum_sent_bytes += sent_bytes;
-	}
+        sent_bytes = send(enc->sock_id, enc->cipher_text, size, 0);
 
-	if(cum_sent_bytes >= size) {
-	    break;
-	}
-	
+        if(sent_bytes >= 0) {
+            cum_sent_bytes += sent_bytes;
+        }
+
+        if(cum_sent_bytes >= size) {
+            break;
+        }
+
     }
 
-    printf("\tSent : %d \n", cum_sent_bytes + sent_bytes);
+    enc->plain_text_len = size;
 
     return SUCCESS;
 }
 
 
+/*
+ * main method for encryption
+ */
 int main(int argc, char *argv[])
 {
     Error_t  ret_status = SUCCESS;
@@ -127,8 +154,12 @@ int main(int argc, char *argv[])
     int     f_size = 0;
     FILE    *fptr_read = NULL;
 
-    Enc_Dec_Apparatus_t *enc = (Enc_Dec_Apparatus_t *) malloc (sizeof(Enc_Dec_Apparatus_t));
+    Enc_Dec_Apparatus_t *enc = NULL;
 
+
+    /*
+     * Check if sufficient arguments are provided
+     */
     if(argc < 3) {
 
         printf("ERROR: Insufficient/Incorrect Arguments\n");
@@ -136,21 +167,31 @@ int main(int argc, char *argv[])
         return FAILURE;
     }
 
+    /*
+     * Check if this is copy to a remote machines
+     */
     if(!strcmp("-d", argv[2])) 
     { 
         if(argc < 4) 
-	{
+        {
             bad_options = TRUE;
         }
 
         mode = REMOTE;
     }
-    
+
+    /*
+     * Check if this is copy to a local machines
+     */
     else if(!strcmp("-l", argv[2])) 
     {
         mode = LOCAL;
     }
 
+    /*
+     * If you're here you must have provided wrong arguments
+     * report an error and exit
+     */
     else 
     {
         bad_options = TRUE;
@@ -164,93 +205,168 @@ int main(int argc, char *argv[])
     }
 
 
-    fptr_read = fopen(argv[1], "r+");
+    /*
+     * Initialize encrption and decryption apparatus
+     */
+    ret_status = init(&enc);
+
+    if(SUCCESS != ret_status) {
+        printf("Failed to allocate memory \n");
+        exit(1);
+    }
+
+    /* Open source file */
+    fptr_read = fopen(argv[1], "rb");
 
     if(NULL == fptr_read) 
     {
-	printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
-	return FOPEN_FAIL;
+        printf("ERROR: Error while opening input file %s, please check if file exists\n", argv[1]); 
+        return FOPEN_FAIL;
     }
 
     f_size = get_file_size(fptr_read);
 
+    enc->salt = (char *) malloc(sizeof(char) * SALT_LEN);
+    strcpy(enc->salt, SALT);
+
+    /*
+     * Generate HASH key for a password
+     */
     generate_passkey(enc);
 
     if(NULL == enc->key) 
     {
-	printf("Key generation Failed....exiting with 1");
-	exit(1);
+        printf("Key generation Failed....exiting with 1");
+        exit(1);
     }
 
+    /*
+     * Encrypt the file data
+     */
     ret_status = encrypt_file_data(fptr_read, enc, f_size);
 
     if( ret_status != SUCCESS || NULL == enc->cipher_text) {
-	printf("Encryption Failed....exiting with 1");
-	exit(1);
+        printf("Encryption Failed....exiting with 1");
+        exit(1);
     }
 
+    /*
+     * Generate HMAC for encrypted data and append it to end
+     */
     ret_status = generate_hmac(enc, f_size);
 
     if( ret_status != SUCCESS ) {
-	printf("Message Authentication Failed....exiting with 1");
-	exit(1);
+        printf("Message Authentication Failed....exiting with 1");
+        exit(1);
     }
 
     switch(mode) {
 
-	case REMOTE:
-	    {
-		ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
+        /*
+         * If this is remote copy, open connectiont to remote machine
+         * and transfer the data using socket
+         */
+        case REMOTE:
+            {
+                FILE   *fptr_write = NULL;
 
-		ret_status = init_secure_connection(enc, server_port, server_ip);
+                char *temp_file_name = (char *) malloc (strlen(argv[1])+3);
+                strcpy(temp_file_name, argv[1]);
+                strcat(temp_file_name, ".uf");
 
-		if(SUCCESS != ret_status) {
-		    printf("Connection establishment failed \n");
-		    return FAILURE;
-		}
-		else {
-		    printf("Connected !! \n");
-		}
+                fptr_write = fopen(temp_file_name, "rb");
 
-		ret_status = start_data_transfer(enc, f_size);
-    		
-		close(enc->sock_id);
-	    }
-	    break;
+                if(fptr_write) {
+                    printf("[ERROR]: %s file already exists, exiting with error code (33)\n", temp_file_name);
+                    fclose(fptr_write);
+                    exit(33);
+                }
 
-	case LOCAL:
-	    {
-    		FILE   *fptr_write = NULL;
+                fptr_write = fopen(temp_file_name, "wb");
 
-		strcat(argv[1], ".uf");
+                fwrite(enc->cipher_text, 1, f_size, fptr_write);
+                fwrite(&enc->iv, 1, IV_LEN, fptr_write);	
+                fwrite(enc->salt, 1, SALT_LEN, fptr_write);
+                fwrite(enc->hmac, 1, HASH_SZ, fptr_write);
 
-    		fptr_write = fopen(argv[1], "r+");
-		
-		if(fptr_write) {
-			printf("[ERROR]: %s file already exists, exiting with error code 33\n", argv[1]);
-			fclose(fptr_write);
-			exit(33);
-		}
+                int written = f_size + IV_LEN + SALT_LEN + HASH_SZ;
+                printf("Successfully encrypted %s to %s.uf ( %u bytes written) \n ", 
+                        argv[1], argv[1], written);
 
-    		fptr_write = fopen(argv[1], "w+");
+                ret_status = extract_server_ip_port(argv[3], &server_ip, &server_port);
 
-		fwrite(&enc->iv, 1, IV_LEN, fptr_write);	
-		fwrite(enc->salt, 1, SALT_LEN, fptr_write);
-		fwrite(enc->cipher_text, 1, strlen(enc->cipher_text), fptr_write);
-		fwrite(enc->hmac, 1, HASH_SZ, fptr_write);
+                ret_status = init_secure_connection(enc, server_port, server_ip);
 
-		fclose(fptr_write);
+                if(SUCCESS != ret_status) {
+                    printf("Connection establishment failed \n");
+                    return FAILURE;
+                }
+                else {
+#ifdef DEBUF
+                    printf("Connected !! \n");
+#endif
+                }
 
-	    }
-	    break;
+                ret_status = start_data_transfer(enc, f_size);
+
+                printf("Transmitting to %s:%u \n", argv[3], server_port);
+
+                close(enc->sock_id);
+
+                printf("Successfully Received\n");
+            }
+            break;
+
+        case LOCAL:
+            /*
+             * If this is local copy, open local destination file
+             * Write the encrypted data to that file
+             */
+            {
+                FILE   *fptr_write = NULL;
+                int    payload_len = f_size;
+
+                char *temp_file_name = (char *) malloc (strlen(argv[1])+3);
+                strcpy(temp_file_name, argv[1]);
+                strcat(temp_file_name, ".uf");
+
+                fptr_write = fopen(temp_file_name, "rb");
+
+                if(fptr_write) {
+                    printf("[ERROR]: %s file already exists, exiting with error code (33)\n", temp_file_name);
+                    fclose(fptr_write);
+                    exit(33);
+                }
+
+                fptr_write = fopen(temp_file_name, "wb");
+
+
+                fwrite(enc->cipher_text, 1, payload_len, fptr_write);
+                fwrite(&enc->iv, 1, IV_LEN, fptr_write);	
+                fwrite(enc->salt, 1, SALT_LEN, fptr_write);
+                fwrite(enc->hmac, 1, HASH_SZ, fptr_write);
+
+                int written_size = (f_size + IV_LEN + SALT_LEN + HASH_SZ);
+                printf("Successfully encrypted %s to %s.uf  ( %u bytes written) \n", 
+                        argv[1], argv[1], written_size);
+
+                fclose(fptr_write);
+
+                FREE(temp_file_name);
+
+
+            }
+            break;
     };
-    
-    FREE(enc->key);
-    FREE(enc->salt);
-    FREE(enc->cipher_text);
-    FREE(enc->hmac);
-    FREE(enc);
 
+    /*
+     * Free allocated memory buffers and exit *
+     */
+    deinit(enc);
+
+    /*
+     * Close source file
+     */
     fclose(fptr_read);
 
     return 0;
